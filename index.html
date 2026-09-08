@@ -1,0 +1,765 @@
+<title>Klepsydra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,900;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Deliberately single dark "stage plate" world — this runs propped up in a
+     dim rehearsal room, so it does not follow the viewer's light/dark setting;
+     every color below is painted explicitly. */
+  :root{
+    --ground:#15120d;
+    --ground-2:#1b1610;
+    --panel:#211b13;
+    --panel-line: rgba(242,234,216,0.09);
+    --brass:#c9974f;
+    --brass-bright:#e8c07a;
+    --glass-line: rgba(242,234,216,0.32);
+    --sand:#dfa438;
+    --sand-bright:#f2d27a;
+    --sand-dark:#a9761e;
+    --break-dark:#3c6a65;
+    --text:#f2ead8;
+    --text-dim:#a89880;
+    --text-faint:#6f6353;
+    --song:#e0a939;
+    --song-glow: rgba(224,169,57,0.18);
+    --break:#5f9a94;
+    --break-glow: rgba(95,154,148,0.18);
+    --focus:#e8c07a;
+    --danger:#c9634a;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse 120% 70% at 50% -10%, var(--ground-2), var(--ground) 60%);
+    color:var(--text);
+    font-family:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+
+  h1,h2{ font-family:'Fraunces', Georgia, serif; margin:0; }
+
+  button{ font-family:inherit; }
+  input{ font-family:inherit; }
+
+  ::selection{ background:var(--brass); color:#221a0e; }
+
+  :focus-visible{ outline:2px solid var(--focus); outline-offset:2px; border-radius:6px; }
+
+  .app{ max-width:520px; margin:0 auto; padding:20px 20px 32px; min-height:100vh; display:flex; flex-direction:column; }
+
+  /* ---------- header ---------- */
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{ font-size:28px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
+  .brand-text h1{ font-size:22px; font-weight:600; letter-spacing:.01em; color:var(--text); }
+  .brand-text p{ margin:1px 0 0; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-faint); }
+
+  .icon-btn{
+    width:42px; height:42px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--panel-line);
+    color:var(--text-dim); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:background .15s, color .15s, transform .15s;
+  }
+  .icon-btn:hover{ color:var(--brass-bright); background:#271f14; }
+  .icon-btn:active{ transform:scale(.94); }
+  .icon-btn svg{ width:20px; height:20px; }
+
+  /* ---------- stage ---------- */
+  .stage{
+    flex:1; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:18px; padding:18px 0 6px;
+    transition: box-shadow .3s;
+    border-radius:24px;
+  }
+
+  .phase-pill{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:7px 16px; border-radius:999px;
+    background:var(--panel); border:1px solid var(--panel-line);
+    font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-dim);
+    transition: color .3s, box-shadow .3s;
+  }
+  .phase-pill .dot{ width:8px; height:8px; border-radius:50%; background:var(--song); box-shadow:0 0 10px var(--song); transition: background .3s, box-shadow .3s; }
+  .phase-pill.is-break .dot{ background:var(--break); box-shadow:0 0 10px var(--break); }
+  .phase-pill.is-break{ color:var(--break); }
+  .phase-pill:not(.is-break){ color:var(--song); }
+
+  .phase-pill.pulse{ animation: pillpulse .5s ease-out; }
+  @keyframes pillpulse{ 0%{ transform:scale(1); } 30%{ transform:scale(1.08); } 100%{ transform:scale(1); } }
+
+  /* ---------- instrument (pendulum behind, hourglass in front) ---------- */
+  .instrument{ position:relative; width:min(78vw,230px); height:min(78vw,230px); perspective:900px; }
+
+  .pendulum{ position:absolute; inset:0; width:100%; height:100%; z-index:1; }
+  .pendulum-arm{ transform-origin:0px 0px; animation:swing 1000ms ease-in-out infinite; animation-play-state:paused; }
+  @keyframes swing{ 0%{ transform:rotate(-25deg); } 50%{ transform:rotate(25deg); } 100%{ transform:rotate(-25deg); } }
+
+  .hourglass-wrap{
+    position:absolute; inset:0; z-index:2;
+    transform-style:preserve-3d;
+    transform:rotateX(0deg);
+    transition: transform .26s cubic-bezier(.3,0,.2,1);
+  }
+  .hourglass-wrap.flip-out{ transform:rotateX(94deg); }
+  .hourglass{ width:100%; height:100%; display:block; filter: drop-shadow(0 10px 18px rgba(0,0,0,.45)); }
+
+  #sandTopPath, #sandBottomPath{ transition: fill .3s; }
+  .is-break #sandTopPath, .is-break #sandBottomPath{ fill: var(--break); }
+  .grain{ transition: fill .3s; }
+  .is-break .grain{ fill: var(--break-dark); }
+
+  #streamGrains{ transition: opacity .2s; }
+  #streamGrains circle{ animation: fall 480ms linear infinite; animation-play-state:paused; }
+  .hourglass.running #streamGrains circle{ animation-play-state:running; }
+  @keyframes fall{ 0%{ transform:translateY(0); opacity:0; } 12%{ opacity:1; } 88%{ opacity:1; } 100%{ transform:translateY(7px); opacity:0; } }
+
+  /* ---------- readout ---------- */
+  .readout{ text-align:center; }
+  .time{
+    font-size:clamp(52px,15vw,76px); font-weight:600; letter-spacing:.01em;
+    font-variant-numeric: tabular-nums; line-height:1; color:var(--text);
+  }
+  .submeta{ margin-top:6px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-faint); }
+
+  .beatrow{ display:flex; align-items:center; gap:14px; }
+  .bpm{ font-size:15px; color:var(--text-dim); font-variant-numeric:tabular-nums; }
+  .bpm span{ color:var(--text-faint); font-size:11px; letter-spacing:.1em; }
+  .beats{ display:flex; gap:7px; }
+  .beats span{ width:8px; height:8px; border-radius:50%; background:var(--panel-line); transition: background .08s, transform .08s; }
+  .beats span.lit{ background:var(--brass-bright); transform:scale(1.25); box-shadow:0 0 8px var(--brass); }
+  .beats span.lit.accent{ background:var(--sand-bright); box-shadow:0 0 10px var(--sand); }
+
+  /* ---------- controls ---------- */
+  .controls{ display:flex; align-items:center; gap:12px; margin-top:4px; }
+  .btn{
+    font-family:'IBM Plex Mono', monospace; font-size:13px; letter-spacing:.06em; text-transform:uppercase;
+    border-radius:999px; cursor:pointer; border:1px solid transparent; transition: transform .12s, filter .15s, background .15s;
+  }
+  .btn:active{ transform:scale(.96); }
+  .btn.ghost{ background:var(--panel); border-color:var(--panel-line); color:var(--text-dim); padding:12px 18px; }
+  .btn.ghost:hover{ color:var(--text); background:#271f14; }
+  .btn.primary{
+    background:linear-gradient(180deg,var(--brass-bright),var(--brass));
+    color:#241a0a; font-weight:700; padding:14px 30px; box-shadow:0 6px 20px rgba(201,151,79,.28);
+  }
+  .btn.primary:hover{ filter:brightness(1.06); }
+  .btn.small{ padding:8px 12px; font-size:11px; }
+
+  /* ---------- settings panel ---------- */
+  .scrim{
+    position:fixed; inset:0; background:rgba(10,8,5,.55); backdrop-filter:blur(2px);
+    opacity:0; pointer-events:none; transition:opacity .25s; z-index:10;
+  }
+  .scrim.show{ opacity:1; pointer-events:auto; }
+
+  .panel{
+    position:fixed; top:0; right:0; height:100%; width:min(340px,88vw);
+    background:var(--ground-2); border-left:1px solid var(--panel-line);
+    transform:translateX(100%); transition:transform .28s cubic-bezier(.3,0,.2,1);
+    z-index:11; padding:22px 20px 28px; overflow-y:auto;
+    box-shadow:-30px 0 60px rgba(0,0,0,.4);
+  }
+  .panel.open{ transform:translateX(0); }
+
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+  .panel-head h2{ font-size:19px; font-weight:600; color:var(--text); }
+
+  .field{ margin-bottom:22px; }
+  .field label{ display:block; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-faint); margin-bottom:9px; }
+  .field.row{ display:flex; align-items:center; justify-content:space-between; }
+  .field.row label{ margin-bottom:0; }
+
+  .stepper-row, .bpm-row{ display:flex; align-items:center; gap:8px; }
+  .stepper-row span{ font-size:12px; color:var(--text-faint); margin-right:6px; }
+
+  input[type=number]{
+    width:58px; padding:10px 8px; text-align:center; font-size:16px; font-variant-numeric:tabular-nums;
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:10px; color:var(--text);
+  }
+  input[type=number]:focus{ border-color:var(--brass); }
+  input[type=number]::-webkit-inner-spin-button{ opacity:.6; }
+  #bpmInput{ width:76px; }
+
+  .switch{ appearance:none; width:42px; height:24px; border-radius:999px; background:var(--panel); border:1px solid var(--panel-line); position:relative; cursor:pointer; transition:background .2s; }
+  .switch::after{ content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--text-dim); transition:transform .2s, background .2s; }
+  .switch:checked{ background:var(--brass); border-color:var(--brass); }
+  .switch:checked::after{ transform:translateX(18px); background:#241a0a; }
+
+  .hint{ font-size:11.5px; line-height:1.55; color:var(--text-faint); margin-top:26px; padding-top:18px; border-top:1px solid var(--panel-line); }
+
+  @media (prefers-reduced-motion: reduce){
+    .pendulum-arm, .hourglass-wrap, .phase-pill.pulse, #streamGrains circle{ animation:none !important; transition:none !important; }
+  }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">⏳</span>
+      <div class="brand-text">
+        <h1>Klepsydra</h1>
+        <p>metronom prób</p>
+      </div>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="Ustawienia" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="phase-pill" id="phasePill"><span class="dot"></span><span id="phaseLabel">Gramy</span></div>
+
+    <div class="instrument">
+      <svg class="pendulum" viewBox="0 0 230 220" aria-hidden="true">
+        <circle cx="115" cy="18" r="5" fill="var(--brass-bright)"></circle>
+        <g transform="translate(115,18)">
+          <g class="pendulum-arm" id="pendulumArm">
+            <line x1="0" y1="0" x2="0" y2="150" stroke="var(--brass)" stroke-width="4" stroke-linecap="round"></line>
+            <circle cx="0" cy="150" r="13" fill="var(--brass-bright)" stroke="var(--brass)" stroke-width="2"></circle>
+          </g>
+        </g>
+      </svg>
+
+      <div class="hourglass-wrap" id="hourglassWrap">
+        <svg class="hourglass" id="hourglassSvg" viewBox="0 0 200 320" aria-hidden="true">
+          <defs>
+            <clipPath id="topClip"><path d="M30,22 Q8,92 95,158 L105,158 Q192,92 170,22 Z"></path></clipPath>
+            <clipPath id="bottomClip"><path d="M30,298 Q8,228 95,162 L105,162 Q192,228 170,298 Z"></path></clipPath>
+            <clipPath id="sandTopShapeClip"><path id="sandTopShapeForClip" d=""></path></clipPath>
+            <clipPath id="sandBottomShapeClip"><path id="sandBottomShapeForClip" d=""></path></clipPath>
+          </defs>
+
+          <rect x="18" y="4" width="164" height="16" rx="7" fill="var(--brass)"></rect>
+          <rect x="18" y="300" width="164" height="16" rx="7" fill="var(--brass)"></rect>
+          <rect x="86" y="150" width="28" height="20" rx="4" fill="var(--brass)"></rect>
+
+          <g clip-path="url(#topClip)">
+            <path id="sandTopPath" fill="var(--sand)" d=""></path>
+            <g clip-path="url(#sandTopShapeClip)" id="grainsTop"></g>
+          </g>
+
+          <g clip-path="url(#bottomClip)">
+            <path id="sandBottomPath" fill="var(--sand)" d=""></path>
+            <g clip-path="url(#sandBottomShapeClip)" id="grainsBottom"></g>
+          </g>
+
+          <g id="streamGrains">
+            <circle cx="99" cy="158" r="1.3" fill="var(--sand-bright)" style="animation-delay:-360ms"></circle>
+            <circle cx="100.6" cy="158" r="1" fill="var(--sand-bright)" style="animation-delay:-180ms"></circle>
+            <circle cx="99.6" cy="158" r="1.3" fill="var(--sand-bright)" style="animation-delay:0ms"></circle>
+            <circle cx="100.3" cy="158" r="1" fill="var(--sand-bright)" style="animation-delay:-270ms"></circle>
+          </g>
+
+          <path d="M30,22 Q8,92 95,158 L105,158 Q192,92 170,22" fill="none" stroke="var(--glass-line)" stroke-width="2"></path>
+          <path d="M30,298 Q8,228 95,162 L105,162 Q192,228 170,298" fill="none" stroke="var(--glass-line)" stroke-width="2"></path>
+        </svg>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="time" id="timeDisplay">4:00</div>
+      <div class="submeta" id="phaseSub">czas grania</div>
+    </div>
+
+    <div class="beatrow">
+      <div class="bpm"><span id="bpmDisplay">100</span> <span>BPM</span></div>
+      <div class="beats" id="beatDots">
+        <span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn ghost" id="resetBtn">Reset</button>
+      <button class="btn primary" id="startBtn">Start</button>
+      <button class="btn ghost" id="skipBtn">Pomiń</button>
+    </div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" aria-hidden="true">
+  <div class="panel-head">
+    <h2>Ustawienia</h2>
+    <button class="icon-btn" id="closeBtn" aria-label="Zamknij">✕</button>
+  </div>
+
+  <div class="field">
+    <label>Czas grania</label>
+    <div class="stepper-row">
+      <input type="number" id="songMin" min="0" max="59" value="4" inputmode="numeric"><span>min</span>
+      <input type="number" id="songSecI" min="0" max="59" value="0" inputmode="numeric"><span>s</span>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Czas przerwy</label>
+    <div class="stepper-row">
+      <input type="number" id="breakMin" min="0" max="59" value="1" inputmode="numeric"><span>min</span>
+      <input type="number" id="breakSecI" min="0" max="59" value="0" inputmode="numeric"><span>s</span>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Tempo</label>
+    <div class="bpm-row">
+      <input type="number" id="bpmInput" min="30" max="300" value="100" inputmode="numeric">
+      <button class="btn ghost small" id="tapBtn">Wystukaj tempo</button>
+    </div>
+  </div>
+
+  <div class="field row">
+    <label for="soundToggle">Klik metronomu</label>
+    <input type="checkbox" id="soundToggle" class="switch">
+  </div>
+
+  <div class="field row">
+    <label for="chimeToggle">Dźwięk przy przesypaniu</label>
+    <input type="checkbox" id="chimeToggle" class="switch">
+  </div>
+
+  <p class="hint">Spacja = start / pauza. Po zakończeniu fazy klepsydra przesypuje się sama i przełącza między graniem a przerwą — w kółko, aż wciśniesz pauzę.</p>
+</aside>
+
+<script>
+(function(){
+  "use strict";
+
+  var els = {
+    stage: document.getElementById('stage'),
+    phasePill: document.getElementById('phasePill'),
+    phaseLabel: document.getElementById('phaseLabel'),
+    phaseSub: document.getElementById('phaseSub'),
+    time: document.getElementById('timeDisplay'),
+    bpmDisplay: document.getElementById('bpmDisplay'),
+    beatDots: Array.prototype.slice.call(document.querySelectorAll('#beatDots span')),
+    startBtn: document.getElementById('startBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    skipBtn: document.getElementById('skipBtn'),
+    hourglassWrap: document.getElementById('hourglassWrap'),
+    hourglassSvg: document.getElementById('hourglassSvg'),
+    pendulumArm: document.getElementById('pendulumArm'),
+    sandTopPath: document.getElementById('sandTopPath'),
+    sandTopShapeForClip: document.getElementById('sandTopShapeForClip'),
+    sandBottomPath: document.getElementById('sandBottomPath'),
+    sandBottomShapeForClip: document.getElementById('sandBottomShapeForClip'),
+    grainsTop: document.getElementById('grainsTop'),
+    grainsBottom: document.getElementById('grainsBottom'),
+    streamGrains: document.getElementById('streamGrains'),
+    settingsBtn: document.getElementById('settingsBtn'),
+    closeBtn: document.getElementById('closeBtn'),
+    scrim: document.getElementById('scrim'),
+    panel: document.getElementById('panel'),
+    songMin: document.getElementById('songMin'),
+    songSecI: document.getElementById('songSecI'),
+    breakMin: document.getElementById('breakMin'),
+    breakSecI: document.getElementById('breakSecI'),
+    bpmInput: document.getElementById('bpmInput'),
+    tapBtn: document.getElementById('tapBtn'),
+    soundToggle: document.getElementById('soundToggle'),
+    chimeToggle: document.getElementById('chimeToggle')
+  };
+
+  var STORE_KEY = 'klepsydra-settings-v1';
+
+  var state = {
+    songSec: 240,
+    breakSec: 60,
+    bpm: 100,
+    soundOn: false,
+    chimeOn: true
+  };
+
+  (function loadSettings(){
+    try{
+      var raw = localStorage.getItem(STORE_KEY);
+      if(raw){
+        var saved = JSON.parse(raw);
+        if(typeof saved.songSec === 'number') state.songSec = saved.songSec;
+        if(typeof saved.breakSec === 'number') state.breakSec = saved.breakSec;
+        if(typeof saved.bpm === 'number') state.bpm = saved.bpm;
+        if(typeof saved.soundOn === 'boolean') state.soundOn = saved.soundOn;
+        if(typeof saved.chimeOn === 'boolean') state.chimeOn = saved.chimeOn;
+      }
+    }catch(e){}
+  })();
+
+  function saveSettings(){
+    try{
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        songSec: state.songSec, breakSec: state.breakSec, bpm: state.bpm,
+        soundOn: state.soundOn, chimeOn: state.chimeOn
+      }));
+    }catch(e){}
+  }
+
+  var phase = 'song';       // 'song' | 'break'
+  var running = false;
+  var remainingMs = state.songSec * 1000;
+  var phaseEndAt = null;
+  var rafId = null;
+  var beatTimer = null;
+  var beatIndex = 0;
+  var tapTimes = [];
+  var audioCtx = null;
+
+  function currentTotalSec(){ return phase === 'song' ? state.songSec : state.breakSec; }
+
+  function formatTime(ms){
+    var totalSec = Math.max(0, Math.ceil(ms / 1000));
+    var m = Math.floor(totalSec / 60);
+    var s = totalSec % 60;
+    return m + ':' + (s < 10 ? '0' + s : s);
+  }
+
+  function makeGrains(container, count, xMin, xMax, yMin, yMax, rMin, rMax){
+    var frag = document.createDocumentFragment();
+    for(var i=0;i<count;i++){
+      var c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      var x = xMin + Math.random()*(xMax-xMin);
+      var y = yMin + Math.random()*(yMax-yMin);
+      var r = rMin + Math.random()*(rMax-rMin);
+      c.setAttribute('cx', x.toFixed(1));
+      c.setAttribute('cy', y.toFixed(1));
+      c.setAttribute('r', r.toFixed(2));
+      c.setAttribute('class','grain');
+      c.setAttribute('fill', Math.random() < 0.5 ? 'var(--sand-dark)' : 'var(--sand-bright)');
+      c.setAttribute('opacity', (0.35 + Math.random()*0.35).toFixed(2));
+      frag.appendChild(c);
+    }
+    container.appendChild(frag);
+  }
+
+  function initGrains(){
+    makeGrains(els.grainsTop, 90, 16, 184, 22, 158, 0.8, 1.7);
+    makeGrains(els.grainsBottom, 130, 10, 190, 162, 298, 0.9, 1.9);
+  }
+
+  /* Sand surfaces are drawn as soft mound / funnel silhouettes (not flat
+     blocks) so the pile builds up at an angle of repose and the draining
+     top forms a shallow crater — then grain speckles are double-clipped to
+     that same silhouette so they only appear where sand actually is. */
+  function updateSand(elapsedFrac){
+    elapsedFrac = Math.max(0, Math.min(1, elapsedFrac));
+    var remainFrac = 1 - elapsedFrac;
+
+    var topY = 22 + 136 * elapsedFrac;
+    var dip = 16 * 4 * remainFrac * (1 - remainFrac);
+    var topD = 'M -10,' + topY.toFixed(1) +
+      ' Q 100,' + (topY + dip).toFixed(1) + ' 210,' + topY.toFixed(1) +
+      ' L 210,158 L -10,158 Z';
+    els.sandTopPath.setAttribute('d', topD);
+    els.sandTopShapeForClip.setAttribute('d', topD);
+
+    var h = 136 * elapsedFrac;
+    var bhw = Math.min(160, h * 1.25 + 6);
+    var apexY = 298 - h;
+    var controlY = 2 * apexY - 298;
+    var bottomD = 'M ' + (100-bhw).toFixed(1) + ',298 Q 100,' + controlY.toFixed(1) + ' ' + (100+bhw).toFixed(1) + ',298 Z';
+    els.sandBottomPath.setAttribute('d', bottomD);
+    els.sandBottomShapeForClip.setAttribute('d', bottomD);
+
+    els.streamGrains.style.opacity = (running && elapsedFrac < 1) ? '1' : '0';
+  }
+
+  function updateDisplay(ms){
+    els.time.textContent = formatTime(ms);
+    var total = currentTotalSec() * 1000 || 1;
+    updateSand(1 - (ms / total));
+  }
+
+  function updatePhaseUI(){
+    var isBreak = phase === 'break';
+    els.phasePill.classList.toggle('is-break', isBreak);
+    els.stage.classList.toggle('is-break', isBreak);
+    els.phaseLabel.textContent = isBreak ? 'Przerwa' : 'Gramy';
+    els.phaseSub.textContent = isBreak ? 'czas przerwy' : 'czas grania';
+    els.phasePill.classList.remove('pulse');
+    void els.phasePill.offsetWidth;
+    els.phasePill.classList.add('pulse');
+  }
+
+  function updateStartBtn(){
+    els.startBtn.textContent = running ? 'Pauza' : 'Start';
+  }
+
+  /* ---------------- audio ---------------- */
+  function getCtx(){
+    if(!audioCtx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return null;
+      audioCtx = new AC();
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playClick(accent){
+    if(!state.soundOn) return;
+    var ctx = getCtx();
+    if(!ctx) return;
+    var t = ctx.currentTime;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.frequency.value = accent ? 1600 : 1050;
+    gain.gain.setValueAtTime(accent ? 0.32 : 0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.05);
+  }
+
+  function playChime(){
+    if(!state.chimeOn) return;
+    var ctx = getCtx();
+    if(!ctx) return;
+    [880, 1320].forEach(function(freq, i){
+      var t = ctx.currentTime + i * 0.09;
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.linearRampToValueAtTime(0.22, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.42);
+    });
+  }
+
+  /* ---------------- metronome ---------------- */
+  function periodMs(){ return 60000 / state.bpm; }
+
+  function tickBeat(){
+    var accent = beatIndex % 4 === 0;
+    playClick(accent);
+    els.beatDots.forEach(function(dot, i){
+      dot.classList.toggle('lit', i === beatIndex % 4);
+      dot.classList.toggle('accent', i === beatIndex % 4 && accent);
+    });
+    beatIndex++;
+  }
+
+  function restartPendulum(){
+    els.pendulumArm.style.animation = 'none';
+    void els.pendulumArm.offsetWidth;
+    els.pendulumArm.style.animationDuration = (periodMs() * 2) + 'ms';
+    els.pendulumArm.style.animation = '';
+    els.pendulumArm.style.animationDuration = (periodMs() * 2) + 'ms';
+    els.pendulumArm.style.animationPlayState = running ? 'running' : 'paused';
+  }
+
+  function startMetronome(){
+    if(beatTimer) clearInterval(beatTimer);
+    beatIndex = 0;
+    restartPendulum();
+    tickBeat();
+    beatTimer = setInterval(tickBeat, periodMs());
+  }
+
+  function stopMetronome(){
+    if(beatTimer){ clearInterval(beatTimer); beatTimer = null; }
+    els.pendulumArm.style.animationPlayState = 'paused';
+    els.beatDots.forEach(function(dot){ dot.classList.remove('lit','accent'); });
+  }
+
+  /* ---------------- flip / phase switch ---------------- */
+  var flipping = false;
+  function doFlip(){
+    if(flipping) return;
+    flipping = true;
+    els.hourglassWrap.classList.add('flip-out');
+    playChime();
+    setTimeout(function(){
+      phase = (phase === 'song') ? 'break' : 'song';
+      remainingMs = currentTotalSec() * 1000;
+      if(running) phaseEndAt = Date.now() + remainingMs;
+      updateDisplay(remainingMs);
+      updatePhaseUI();
+      els.hourglassWrap.classList.remove('flip-out');
+      flipping = false;
+    }, 260);
+  }
+
+  /* ---------------- main loop ---------------- */
+  function loop(){
+    if(running && !flipping){
+      remainingMs = phaseEndAt - Date.now();
+      if(remainingMs <= 0){
+        updateDisplay(0);
+        doFlip();
+      } else {
+        updateDisplay(remainingMs);
+      }
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
+
+  function start(){
+    if(running) return;
+    getCtx();
+    running = true;
+    phaseEndAt = Date.now() + remainingMs;
+    els.hourglassSvg.classList.add('running');
+    updateStartBtn();
+    startMetronome();
+  }
+
+  function pause(){
+    if(!running) return;
+    remainingMs = Math.max(0, phaseEndAt - Date.now());
+    running = false;
+    els.hourglassSvg.classList.remove('running');
+    updateStartBtn();
+    stopMetronome();
+    updateDisplay(remainingMs);
+  }
+
+  function toggleStart(){ running ? pause() : start(); }
+
+  function reset(){
+    pause();
+    remainingMs = currentTotalSec() * 1000;
+    updateDisplay(remainingMs);
+  }
+
+  function skip(){
+    var wasRunning = running;
+    if(wasRunning) stopMetronome();
+    running = false;
+    doFlip();
+    if(wasRunning){
+      setTimeout(function(){
+        running = true;
+        phaseEndAt = Date.now() + remainingMs;
+        updateStartBtn();
+        startMetronome();
+      }, 270);
+    } else {
+      updateStartBtn();
+    }
+  }
+
+  /* ---------------- settings panel ---------------- */
+  function openPanel(){
+    els.panel.classList.add('open');
+    els.panel.setAttribute('aria-hidden','false');
+    els.scrim.classList.add('show');
+    els.settingsBtn.setAttribute('aria-expanded','true');
+  }
+  function closePanel(){
+    els.panel.classList.remove('open');
+    els.panel.setAttribute('aria-hidden','true');
+    els.scrim.classList.remove('show');
+    els.settingsBtn.setAttribute('aria-expanded','false');
+  }
+
+  function clamp(v, lo, hi){ v = Math.round(Number(v)); if(isNaN(v)) v = lo; return Math.max(lo, Math.min(hi, v)); }
+
+  function readDurationsFromInputs(){
+    var songMin = clamp(els.songMin.value, 0, 59);
+    var songSec = clamp(els.songSecI.value, 0, 59);
+    var breakMin = clamp(els.breakMin.value, 0, 59);
+    var breakSec = clamp(els.breakSecI.value, 0, 59);
+
+    var newSongSec = Math.max(1, songMin * 60 + songSec);
+    var newBreakSec = Math.max(1, breakMin * 60 + breakSec);
+
+    var songChanged = newSongSec !== state.songSec;
+    var breakChanged = newBreakSec !== state.breakSec;
+    state.songSec = newSongSec;
+    state.breakSec = newBreakSec;
+
+    if((phase === 'song' && songChanged) || (phase === 'break' && breakChanged)){
+      remainingMs = currentTotalSec() * 1000;
+      if(running) phaseEndAt = Date.now() + remainingMs;
+      updateDisplay(remainingMs);
+    }
+    saveSettings();
+  }
+
+  function applyBpm(newBpm){
+    state.bpm = clamp(newBpm, 30, 300);
+    els.bpmInput.value = state.bpm;
+    els.bpmDisplay.textContent = state.bpm;
+    if(running) startMetronome(); else restartPendulum();
+    saveSettings();
+  }
+
+  els.songMin.addEventListener('change', readDurationsFromInputs);
+  els.songSecI.addEventListener('change', readDurationsFromInputs);
+  els.breakMin.addEventListener('change', readDurationsFromInputs);
+  els.breakSecI.addEventListener('change', readDurationsFromInputs);
+
+  els.bpmInput.addEventListener('change', function(){ applyBpm(els.bpmInput.value); });
+
+  els.tapBtn.addEventListener('click', function(){
+    var now = Date.now();
+    tapTimes = tapTimes.filter(function(t){ return now - t < 2200; });
+    tapTimes.push(now);
+    if(tapTimes.length > 6) tapTimes.shift();
+    if(tapTimes.length >= 2){
+      var intervals = [];
+      for(var i=1;i<tapTimes.length;i++) intervals.push(tapTimes[i]-tapTimes[i-1]);
+      var avg = intervals.reduce(function(a,b){return a+b;},0) / intervals.length;
+      applyBpm(Math.round(60000/avg));
+    }
+  });
+
+  els.soundToggle.addEventListener('change', function(){
+    state.soundOn = els.soundToggle.checked;
+    if(state.soundOn) getCtx();
+    saveSettings();
+  });
+  els.chimeToggle.addEventListener('change', function(){
+    state.chimeOn = els.chimeToggle.checked;
+    saveSettings();
+  });
+
+  els.settingsBtn.addEventListener('click', openPanel);
+  els.closeBtn.addEventListener('click', closePanel);
+  els.scrim.addEventListener('click', closePanel);
+
+  els.startBtn.addEventListener('click', toggleStart);
+  els.resetBtn.addEventListener('click', reset);
+  els.skipBtn.addEventListener('click', skip);
+
+  document.addEventListener('keydown', function(e){
+    if(e.code === 'Space' && document.activeElement.tagName !== 'INPUT'){
+      e.preventDefault();
+      toggleStart();
+    }
+    if(e.key === 'Escape') closePanel();
+  });
+
+  /* ---------------- init ---------------- */
+  function initInputs(){
+    els.songMin.value = Math.floor(state.songSec/60);
+    els.songSecI.value = state.songSec%60;
+    els.breakMin.value = Math.floor(state.breakSec/60);
+    els.breakSecI.value = state.breakSec%60;
+    els.bpmInput.value = state.bpm;
+    els.bpmDisplay.textContent = state.bpm;
+    els.soundToggle.checked = state.soundOn;
+    els.chimeToggle.checked = state.chimeOn;
+  }
+
+  initInputs();
+  initGrains();
+  remainingMs = currentTotalSec() * 1000;
+  updateDisplay(remainingMs);
+  updatePhaseUI();
+  updateStartBtn();
+  restartPendulum();
+})();
+</script>
